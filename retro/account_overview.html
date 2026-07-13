@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Overview — Integration Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; display: flex; align-items: flex-start; justify-content: center; min-height: 100vh; padding: 20px; }
+
+    @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    @keyframes flicker { 0%,100%{opacity:0.97} 50%{opacity:1} }
+    .crt-cursor { animation: blink 1s step-end infinite; }
+    .crt-box { animation: flicker 4s infinite; width: 100%; max-width: 1200px; }
+
+    .dashboard {
+      background: #1c1f1d;
+      border: 2px solid #2e6b3e;
+      border-radius: 0;
+      font-family: 'IBM Plex Mono', monospace;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+    }
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 3px);
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* Sidebar */
+    .sidebar {
+      width: 180px;
+      flex-shrink: 0;
+      background: #181b19;
+      border-right: 2px solid #2e6b3e;
+      padding: 14px 0;
+    }
+    .sidebar-label { color: #4a5a4a; font-size: 11px; letter-spacing: 1px; padding: 0 14px 10px; }
+    .nav-item { border-left: 3px solid transparent; color: #6a7a6e; padding: 8px 14px; font-size: 13px; cursor: pointer; text-decoration: none; display: block; }
+    .nav-item:hover { color: #a9b3ad; }
+    .nav-item.active { border-left: 3px solid #ff6a1a; background: linear-gradient(90deg, rgba(255,106,26,0.14) 0%, rgba(255,106,26,0) 90%); color: #ff6a1a; }
+
+    /* Main content */
+    .main { flex: 1; min-width: 0; }
+    .topbar {
+      background: #243528;
+      border-bottom: 2px solid #2e6b3e;
+      padding: 6px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #4dff88;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      border: 1px solid #ffb000;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-left: 10px;
+    }
+    .theme-toggle .active-theme { background: #ffb000; color: #2b2116; padding: 4px 12px; font-size: 11px; font-weight: 500; cursor: default; }
+    .theme-toggle .inactive-theme { color: #6a7a6e; padding: 4px 12px; font-size: 11px; cursor: pointer; }
+    .theme-toggle .inactive-theme:hover { color: #a9b3ad; }
+
+    .content { padding: 20px 22px; }
+
+    .title-banner {
+      border: 1px solid #ff6a1a;
+      background: radial-gradient(ellipse at center, rgba(255,106,26,0.16) 0%, rgba(255,106,26,0.04) 65%, rgba(255,106,26,0) 100%);
+      padding: 14px 18px;
+      margin-bottom: 18px;
+    }
+    .title-text {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      color: #ff6a1a;
+      font-size: 24px;
+      line-height: 1.4;
+      letter-spacing: 1.5px;
+      text-shadow: 0 0 8px rgba(255,106,26,0.6);
+    }
+
+    .filters { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; font-size: 14px; }
+    .filter-group { display: flex; flex-direction: column; }
+    .filter-label { color: #ffb000; margin-bottom: 4px; }
+    .filter-field {
+      border: 1px solid #4dff88;
+      border-radius: 6px;
+      background: radial-gradient(ellipse at center, rgba(77,255,136,0.14) 0%, rgba(77,255,136,0.03) 65%, rgba(77,255,136,0) 100%);
+      color: #4dff88;
+      padding: 6px 10px;
+      min-width: 110px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+    }
+    .filter-field.blue {
+      border-color: #6fa8c9;
+      background: radial-gradient(ellipse at center, rgba(111,168,201,0.16) 0%, rgba(111,168,201,0.04) 65%, rgba(111,168,201,0) 100%);
+      color: #6fa8c9;
+    }
+    .submit-btn {
+      border: 1px solid #ffb000;
+      border-radius: 6px;
+      background: radial-gradient(ellipse at center, rgba(255,176,0,0.16) 0%, rgba(255,176,0,0.04) 65%, rgba(255,176,0,0) 100%);
+      color: #ffb000;
+      padding: 7px 18px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+    .submit-btn:hover { background: rgba(255,176,0,0.2); }
+
+    .divider { color: #2e6b3e; font-size: 13px; margin-bottom: 10px; }
+
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 6px 10px; }
+    thead td { color: #ffb000; border-bottom: 1px solid #2e6b3e; }
+    tbody td { color: #7dd996; }
+    .cell-empty { color: #4a5a4a; }
+    .cell-success { background: #1f3a26; color: #4dff88; cursor: pointer; transition: background 0.15s; }
+    .cell-success:hover { background: #274d31; }
+    .cell-failed { background: #3a2020; color: #ff5c5c; cursor: pointer; transition: background 0.15s; }
+    .cell-failed:hover { background: #4a2828; }
+    .cell-mixed { background: #3a2a10; color: #ffb000; cursor: pointer; transition: background 0.15s; }
+    .cell-mixed:hover { background: #4a3518; }
+
+    .footer-bar { color: #2e6b3e; font-size: 13px; margin-top: 16px; }
+    .ready { color: #4a5a4a; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="crt-box">
+<div class="dashboard">
+  <div class="scanlines"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-label">MAIN MENU</div>
+    <a class="nav-item active" href="account_overview.html">&gt; ACCOUNT OVERVIEW</a>
+    <a class="nav-item" href="integration_log.html">INTEGRATION LOG</a>
+    <a class="nav-item" href="#">REPORTS</a>
+    <a class="nav-item" href="#">CUSTOMERS</a>
+    <a class="nav-item" href="#">LOGS</a>
+    <a class="nav-item" href="#">SETTINGS</a>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <span>SYS://ACCOUNT-OVERVIEW</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span>● ONLINE</span>
+        <div class="theme-toggle">
+          <div class="active-theme">RETRO</div>
+          <div class="inactive-theme">MODERN</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="title-banner">
+        <div class="title-text">ACCOUNT OVERVIEW<span class="crt-cursor" style="color:#4dff88;font-family:'IBM Plex Mono',monospace;">_</span></div>
+      </div>
+
+      <div class="filters">
+        <div class="filter-group">
+          <div class="filter-label">&gt; START_DATE</div>
+          <input class="filter-field" type="text" value="06/07/2026" id="startDate">
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">&gt; END_DATE</div>
+          <input class="filter-field" type="text" value="13/07/2026" id="endDate">
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">&gt; CUSTOMER</div>
+          <select class="filter-field blue" id="customer">
+            <option>AARKE USA (AMAZON)</option>
+            <option>AARKE USA (ECOM)</option>
+          </select>
+        </div>
+        <button class="submit-btn">[ SUBMIT ]</button>
+      </div>
+
+      <div class="divider">═══════════════════════════════════════════════════════</div>
+
+      <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <td>INTEGRATION</td>
+            <td>MON 06</td><td>TUE 07</td><td>WED 08</td><td>THU 09</td>
+            <td>FRI 10</td><td>SAT 11</td><td>SUN 12</td><td>MON 13</td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Inventory update</td>
+            <td class="cell-empty">--</td>
+            <td class="cell-empty">--</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','08/07/2026')">1/1</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','09/07/2026')">2/2</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','10/07/2026')">1/1</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','11/07/2026')">10/10</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','12/07/2026')">9/9</td>
+            <td class="cell-success" onclick="openLog('Inventory Update','13/07/2026')">34/34</td>
+          </tr>
+          <tr>
+            <td>Sales order</td>
+            <td class="cell-success" onclick="openLog('Sales Order','06/07/2026')">56/56</td>
+            <td class="cell-success" onclick="openLog('Sales Order','07/07/2026')">49/49</td>
+            <td class="cell-success" onclick="openLog('Sales Order','08/07/2026')">46/46</td>
+            <td class="cell-success" onclick="openLog('Sales Order','09/07/2026')">28/28</td>
+            <td class="cell-success" onclick="openLog('Sales Order','10/07/2026')">41/41</td>
+            <td class="cell-success" onclick="openLog('Sales Order','11/07/2026')">36/36</td>
+            <td class="cell-success" onclick="openLog('Sales Order','12/07/2026')">28/28</td>
+            <td class="cell-success" onclick="openLog('Sales Order','13/07/2026')">19/19</td>
+          </tr>
+          <tr>
+            <td>Sales order fulfilment</td>
+            <td class="cell-mixed" onclick="openLog('Sales Order Fulfilment','06/07/2026')">59/240</td>
+            <td class="cell-mixed" onclick="openLog('Sales Order Fulfilment','07/07/2026')">42/97</td>
+            <td class="cell-mixed" onclick="openLog('Sales Order Fulfilment','08/07/2026')">29/90</td>
+            <td class="cell-mixed" onclick="openLog('Sales Order Fulfilment','09/07/2026')">16/19</td>
+            <td class="cell-mixed" onclick="openLog('Sales Order Fulfilment','10/07/2026')">32/34</td>
+            <td class="cell-failed" onclick="openLog('Sales Order Fulfilment','11/07/2026')">0/38</td>
+            <td class="cell-failed" onclick="openLog('Sales Order Fulfilment','12/07/2026')">0/52</td>
+            <td class="cell-failed" onclick="openLog('Sales Order Fulfilment','13/07/2026')">0/64</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <div class="footer-bar">═══════════════════════════════════════════════════════</div>
+      <div class="ready">READY<span class="crt-cursor">_</span></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+  function openLog(integration, date) {
+    const params = new URLSearchParams({ integration, date, customer: document.getElementById('customer').value });
+    window.location.href = 'integration_log.html?' + params.toString();
+  }
+</script>
+</body>
+</html>
