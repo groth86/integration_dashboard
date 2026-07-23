@@ -139,3 +139,39 @@ src/
 drizzle/                         # generated SQL migrations
 mockups/                         # original static HTML mockups (reference)
 ```
+
+---
+
+## Security
+
+Keep this checklist in mind when working on the project:
+
+**Secrets and environment variables**
+- Never commit secrets. `DATABASE_URL` and `AUTH_SECRET` live only in `.env`
+  locally (gitignored) and in the hosting platform's environment variables
+  (Railway / Vercel) in deployment.
+- Generate `AUTH_SECRET` with `openssl rand -base64 32` and use a different
+  value per environment. Rotating it invalidates all existing sessions.
+- `.env.example` is the only env file in the repo — it holds placeholders, not
+  real values.
+
+**Credentials**
+- Passwords are stored only as bcrypt hashes, never in plain text.
+- Change the seeded admin password immediately after first login.
+- Session tokens are signed JWTs stored in httpOnly, SameSite=Lax cookies
+  (Secure in production), so they are not readable by client-side JavaScript.
+
+**GitHub access tokens**
+- Prefer **fine-grained** personal access tokens scoped to only this repository
+  over classic tokens with full `repo` access.
+- Set a short expiration rather than "no expiration."
+- Revoke a token as soon as it is no longer needed
+  (GitHub → Settings → Developer settings → Personal access tokens).
+- Never paste tokens into code, commits, issues, or shared chats. If one is
+  ever exposed, revoke it and generate a new one.
+
+**Access control**
+- The `users` menu and all user-management APIs are admin-only, enforced
+  server-side (not just hidden in the UI).
+- Non-admin users only see data for the accounts explicitly assigned to them;
+  account scoping is applied in the database queries, not the client.
