@@ -111,6 +111,103 @@ The app is a standard Next.js project and runs on either platform:
 | npm run db:generate   | Regenerate SQL migrations from schema    |
 | npm run db:migrate    | Apply migrations to the database         |
 | npm run db:seed       | Create admin user + sample data          |
+| npm run monitor       | External job: pull events -> integration_records |
+
+---
+
+## External monitor job
+
+The dashboard only *reads* `integration_records`. That table is populated by
+this repo's **monitor job**, run on a schedule:
+
+```bash
+npm run monitor
+```
+
+### How it works
+
+1. **Checkpoint** — reads `max(timestamp)` from `integration_records` as the
+   high-water mark. On the first run (empty table) it pulls the last
+   `MONITOR_LOOKBACK_HOURS` hours.
+2. **Fetch** — asks the configured *source adapter* for events after the
+   checkpoint.
+3. **Normalise** — validates `timestamp`/`integrationType`, maps `status` to
+   `Success`/`Failed` and `direction` to `In`/`Out`, and resolves each
+   `accountName` to an `accounts.id` (creating the account if
+   `MONITOR_CREATE_ACCOUNTS=true`).
+4. **De-duplicate** — drops events at/-before the checkpoint and any that
+   already exist (keyed on account + integrationType + recordId + timestamp),
+   so reruns and equal-timestamp boundaries never double-insert. No schema
+   change is required.
+5. **Insert** — batch-inserts the remaining rows.
+
+It never updates or deletes existing rows, and only ever writes to
+`integration_records` (plus `accounts`, when creating a missing one).
+
+### Sources
+
+Select with `MONITOR_SOURCE`:
+
+- `mock` (default) — emits a small deterministic batch, no external
+  dependency. Use it for local testing and dry runs.
+- `http` — GETs a JSON array of events from `MONITOR_SOURCE_URL`, passing the
+  checkpoint as a query param and an optional `Bearer` token. If your upstream
+  nests the array, point `MONITOR_SOURCE_ROOT` at it (e.g. `data.events`). The
+  endpoint should return objects shaped like the event fields
+  (`timestamp`, `accountName`, `businessUnit`, `system`, `direction`,
+  `integrationType`, `recordId`, `status`, `response`). To integrate a source
+  with different field names, add an adapter under `src/jobs/sources/`
+  implementing the `MonitorSource` interface in `src/jobs/types.ts`.
+
+All monitor settings live in `.env` (see `.env.example`).
+
+### Dry run
+
+Preview what would be written without touching the database:
+
+```bash
+MONITOR_DRY_RUN=1 npm run monitor
+```
+
+### Scheduling
+
+Run `npm run monitor` on whatever cadence you need. Because the checkpoint is
+derived from the database, overlapping or missed runs are safe.
+
+**cron (self-hosted)**
+
+```cron
+*/5 * * * * cd /path/to/integration_dashboard && /usr/bin/npm run monitor >> /var/log/int-monitor.log 2>&1
+```
+
+**Railway** — add a *Cron* service pointing at this repo with the start command
+`npm run monitor` and the schedule expression (e.g. `*/5 * * * *`). Reference
+the same `DATABASE_URL` as the Postgres service.
+
+**GitHub Actions**
+
+```yaml
+# .github/workflows/monitor.yml
+name: integration-monitor
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run monitor
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONITOR_SOURCE: http
+          MONITOR_SOURCE_URL: ${{ secrets.MONITOR_SOURCE_URL }}
+          MONITOR_SOURCE_TOKEN: ${{ secrets.MONITOR_SOURCE_TOKEN }}
+```
 
 ---
 
@@ -133,6 +230,10 @@ src/
 │   └── layout.tsx
 ├── components/Shell.tsx         # sidebar + topbar + theme toggle
 ├── db/                          # schema, client, migrate, seed
+├── jobs/                        # external monitor job (writes integration_records)
+│   ├── monitor.ts               # orchestrator (npm run monitor)
+│   ├── types.ts                 # RawEvent + MonitorSource interface
+│   └── sources/                 # http + mock source adapters
 ├── lib/auth.ts                  # session helpers
 └── middleware.ts                # route protection
 
