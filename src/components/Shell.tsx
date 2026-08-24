@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,6 +18,9 @@ const SYS_LABEL: Record<string, string> = {
 
 const LINE = '═'.repeat(120);
 
+type Theme = 'retro' | 'modern';
+const THEME_KEY = 'id_theme';
+
 export default function Shell({
   role,
   username,
@@ -28,6 +32,30 @@ export default function Shell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [theme, setTheme] = useState<Theme>('retro');
+
+  // The inline script in layout.tsx has already applied the saved theme to
+  // <html> before paint; this just syncs React state to it.
+  useEffect(() => {
+    const current =
+      document.documentElement.dataset.theme === 'modern' ? 'modern' : 'retro';
+    setTheme(current);
+  }, []);
+
+  function applyTheme(next: Theme) {
+    setTheme(next);
+    if (next === 'modern') {
+      document.documentElement.dataset.theme = 'modern';
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Storage can be unavailable (private mode, blocked cookies) — the theme
+      // still applies for this session, it just won't be remembered.
+    }
+  }
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -43,6 +71,10 @@ export default function Shell({
         <div className="scanlines" />
 
         <nav className="sidebar">
+          <div className="sidebar-brand">
+            <div className="brand-name">CLOUDX SYSTEMS</div>
+            <div className="brand-sub">INTEGRATION MONITORING</div>
+          </div>
           <div className="sidebar-label">MAIN MENU</div>
           {NAV.filter((n) => !n.adminOnly || role === 'admin').map((n) => {
             const active = pathname === n.href;
@@ -66,11 +98,17 @@ export default function Shell({
               <span style={{ color: 'var(--text-muted)' }}>{username.toUpperCase()}</span>
               <span style={{ color: 'var(--green)' }}>● ONLINE</span>
               <div className="theme-toggle">
-                <button className="seg active">RETRO</button>
                 <button
-                  className="seg"
-                  title="Modern theme coming soon"
-                  onClick={() => alert('Modern theme coming soon.')}
+                  className={`seg${theme === 'retro' ? ' active' : ''}`}
+                  onClick={() => applyTheme('retro')}
+                  aria-pressed={theme === 'retro'}
+                >
+                  RETRO
+                </button>
+                <button
+                  className={`seg${theme === 'modern' ? ' active' : ''}`}
+                  onClick={() => applyTheme('modern')}
+                  aria-pressed={theme === 'modern'}
                 >
                   MODERN
                 </button>
