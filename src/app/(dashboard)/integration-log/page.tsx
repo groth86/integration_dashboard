@@ -59,6 +59,7 @@ export default async function IntegrationLogPage({
 
   const rows = await db
     .select({
+      id: integrationRecords.id,
       timestamp: integrationRecords.timestamp,
       businessUnit: integrationRecords.businessUnit,
       system: integrationRecords.system,
@@ -67,6 +68,14 @@ export default async function IntegrationLogPage({
       recordId: integrationRecords.recordId,
       status: integrationRecords.status,
       response: integrationRecords.response,
+      // Latest-outcome fields. Payloads are NOT selected here; the detail
+      // panel loads them on demand from /api/records/:id.
+      workflow: integrationRecords.workflow,
+      orderReference: integrationRecords.orderReference,
+      responseCode: integrationRecords.responseCode,
+      responseDescription: integrationRecords.responseDescription,
+      attemptCount: integrationRecords.attemptCount,
+      hasPayload: sql<boolean>`${integrationRecords.payloadStoredAt} is not null`,
     })
     .from(integrationRecords)
     .where(whereClause)

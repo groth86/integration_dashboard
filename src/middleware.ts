@@ -18,6 +18,9 @@ async function isValid(token: string | undefined): Promise<boolean> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // /api/recordimport/fromflowgear is machine-to-machine and checks its own Bearer token.
+  if (pathname === '/api/recordimport/fromflowgear') return NextResponse.next();
+
   const isPublic =
     pathname === '/login' || pathname.startsWith('/api/auth/login');
 

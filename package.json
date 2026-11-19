@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "monitor": "tsx src/jobs/monitor.ts"
+    "monitor": "tsx src/jobs/monitor.ts",
+    "purge": "tsx src/jobs/purge.ts"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
