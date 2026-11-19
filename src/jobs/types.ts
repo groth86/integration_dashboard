@@ -1,14 +1,7 @@
-export interface RawEvent {
-  timestamp: string | Date;
-  accountName?: string | null;
-  businessUnit?: string | null;
-  system?: string | null;
-  direction?: string | null;
-  integrationType: string;
-  recordId?: string | null;
-  status: string;
-  response?: string | null;
-}
+import type { IncomingRecord } from '../lib/records';
+
+// A source event has the same shape as a record sent to POST /api/recordimport/fromflowgear.
+export type RawEvent = IncomingRecord;
 
 export interface MonitorSource {
   readonly name: string;

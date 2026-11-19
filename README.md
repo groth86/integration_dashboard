@@ -40,7 +40,9 @@ integration data.
 - `users` — login accounts (username, password_hash, role)
 - `accounts` — customer accounts (e.g. "Aarke USA (Amazon)")
 - `user_accounts` — which accounts each user may view (many-to-many)
-- `integration_records` — integration events (fed by the external job)
+- `integration_records` — ONE row per record (account + integration type +
+  record id) holding its **latest outcome** and an attempt count; fed by
+  `POST /api/recordimport/fromflowgear`. Request/response payloads are cleared after 24 hours.
 
 ---
 
@@ -111,11 +113,83 @@ The app is a standard Next.js project and runs on either platform:
 | npm run db:generate   | Regenerate SQL migrations from schema    |
 | npm run db:migrate    | Apply migrations to the database         |
 | npm run db:seed       | Create admin user + sample data          |
-| npm run monitor       | External job: pull events -> integration_records |
+| npm run monitor       | Optional pull job: source -> integration_records |
+| npm run purge         | Clear payloads older than PAYLOAD_CLEAR_AFTER_HOURS |
 
 ---
 
-## External monitor job
+## Ingest API (Flowgear → dashboard)
+
+Flowgear workflows push each record outcome (the point where they set their
+Key-Value to Success or Error) to:
+
+```
+POST /api/recordimport/fromflowgear
+Authorization: Bearer <FLOWGEAR_IMPORT_BEARER_TOKEN>
+Content-Type: application/json
+```
+
+Body: one record, an array, or `{ "records": [...] }` (max `FLOWGEAR_IMPORT_MAX_RECORDS_PER_REQUEST`).
+
+| Field | Required | Notes |
+|---|---|---|
+| `accountName` | yes | Created automatically if new (`FLOWGEAR_IMPORT_AUTO_CREATE_ACCOUNTS`) |
+| `integrationType` | yes | Record type, e.g. `Sales Order`, `Inventory Update` |
+| `recordId` | yes* | Unique key within account + type, e.g. the Key-Value key. *Falls back to `orderReference` |
+| `status` | yes | `Success` or `Failed` (`Error` is accepted as Failed). `InProgress` is ignored |
+| `orderReference` | | e.g. `#3446059` |
+| `workflow` | | Flowgear workflow name |
+| `direction` | | `In` / `Out` (also inbound/outbound) |
+| `system`, `businessUnit` | | |
+| `responseCode` | | Integer HTTP/API code |
+| `responseDescription` | | Up to 2,000 chars |
+| `requestPayload`, `responsePayload` | | String or JSON; truncated at `PAYLOAD_TRUNCATE_AFTER_CHARS` |
+| `timestamp` | | ISO 8601; defaults to now |
+
+Example:
+
+```json
+{
+  "accountName": "Outnet",
+  "integrationType": "Sales Order",
+  "recordId": "#3446836-22255000000000",
+  "orderReference": "#3446836",
+  "workflow": "Outnet (Web) - In - Sales Order",
+  "direction": "In",
+  "system": "CloudX",
+  "status": "Failed",
+  "responseCode": 400,
+  "responseDescription": "UPC WP26LBZ005.BLACK.4 is not in the product style master",
+  "requestPayload": { "pickTicketNumber": "22255000000000" },
+  "responsePayload": { "status": 400 }
+}
+```
+
+Response: `{ "received": n, "upserted": n, "skipped": [{ "index", "recordId", "reason" }] }`.
+
+### Storage rules (kept deliberately small)
+
+- **Latest outcome only.** A unique index on (account, integration type,
+  record id) means each record is one row. A new outcome overwrites it and
+  adds 1 to `attempt_count`; the log shows `RETRIES` = attempts − 1. The table
+  grows with distinct records, not with retries.
+- **Out-of-order safe.** An outcome older than the stored one only increases
+  the count; it never replaces a newer result.
+- **24-hour payloads.** `request_payload` / `response_payload` are cleared
+  `PAYLOAD_CLEAR_AFTER_HOURS` after they were stored. The status, code,
+  description and count stay. Purge runs inside ingest (at most every 10 min
+  per server) and via `npm run purge` — schedule that hourly as a safety net
+  (e.g. Railway Cron `0 * * * *`). A partial index keeps it cheap.
+- **Payloads are never loaded in lists.** The Integration Log fetches them only
+  when a row is opened (`GET /api/records/:id`, account-scoped).
+
+### Migration note
+
+`0001_latest_outcome_ingest` collapses existing duplicate rows into the latest
+one per record (carrying the count) before creating the unique index. Clear
+old mock data first if you don't want it kept: `DELETE FROM integration_records;`
+
+## External monitor job (optional)
 
 The dashboard only *reads* `integration_records`. That table is populated by
 this repo's **monitor job**, run on a schedule:
