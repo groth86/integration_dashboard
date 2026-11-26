@@ -1,7 +1,8 @@
-import { and, gte, lte, inArray, eq, desc, sql } from 'drizzle-orm';
+import { inArray, desc, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { integrationRecords, accounts, userAccounts } from '@/db/schema';
+import { integrationRecords } from '@/db/schema';
 import { getSession } from '@/lib/auth';
+import { buildRecordFilters, getVisibleAccounts, SEARCH_FIELDS, searchParamName } from '@/lib/recordFilters';
 import LogView from './LogView';
 
 export const dynamic = 'force-dynamic';
@@ -12,76 +13,16 @@ const ALLOWED_PAGE_SIZES = [25, 50, 100, 0]; // 0 = All
 export default async function IntegrationLogPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    integration?: string;
-    date?: string; // legacy single-day param (Overview drill-through)
-    from?: string;
-    to?: string;
-    result?: string;
-    customer?: string;
-    page?: string;
-    size?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await getSession();
   if (!session) return null;
   const sp = await searchParams;
 
-  // Visible accounts
-  let visibleAccounts: { id: number; name: string }[] = [];
-  if (session.role === 'admin') {
-    visibleAccounts = await db.select({ id: accounts.id, name: accounts.name }).from(accounts).orderBy(accounts.name);
-  } else {
-    visibleAccounts = await db
-      .select({ id: accounts.id, name: accounts.name })
-      .from(userAccounts)
-      .innerJoin(accounts, eq(userAccounts.accountId, accounts.id))
-      .where(eq(userAccounts.userId, Number(session.sub)))
-      .orderBy(accounts.name);
-  }
+  const visibleAccounts = await getVisibleAccounts(session);
   const accountIds = visibleAccounts.map((a) => a.id);
 
-  // Customer filter. The requested account is only honoured if it is one the
-  // session may already see — a hand-edited ?customer= must never widen access.
-  const requestedCustomer = Number(sp.customer);
-  const customerId =
-    Number.isFinite(requestedCustomer) && accountIds.includes(requestedCustomer)
-      ? requestedCustomer
-      : null;
-
-  const conditions = [] as any[];
-  if (!accountIds.length) {
-    // No accounts -> no data
-    conditions.push(sql`false`);
-  } else if (customerId !== null) {
-    conditions.push(eq(integrationRecords.accountId, customerId));
-  } else {
-    conditions.push(inArray(integrationRecords.accountId, accountIds));
-  }
-
-  if (sp.integration && sp.integration !== 'ALL') {
-    conditions.push(eq(integrationRecords.integrationType, sp.integration));
-  }
-  if (sp.result && sp.result !== 'ALL') {
-    conditions.push(eq(integrationRecords.status, sp.result));
-  }
-
-  // Date range. `date` is the older single-day param kept working so existing
-  // Overview drill-through links and bookmarks don't break.
-  const fromRaw = sp.from || sp.date || '';
-  const toRaw = sp.to || sp.date || '';
-
-  const fromDate = fromRaw ? new Date(fromRaw + 'T00:00:00') : null;
-  if (fromDate && !isNaN(fromDate.getTime())) {
-    conditions.push(gte(integrationRecords.timestamp, fromDate));
-  }
-  const toDate = toRaw ? new Date(toRaw + 'T00:00:00') : null;
-  if (toDate && !isNaN(toDate.getTime())) {
-    toDate.setHours(23, 59, 59, 999); // inclusive of the whole end day
-    conditions.push(lte(integrationRecords.timestamp, toDate));
-  }
-
-  const whereClause = conditions.length ? and(...conditions) : undefined;
+  const { where: whereClause, customerId, from: fromRaw, to: toRaw } = buildRecordFilters(sp, accountIds);
 
   // Count first so an out-of-range page (hand-edited URL, or a filter that
   // shrank the result set) can be clamped instead of showing an empty table.
@@ -163,8 +104,12 @@ export default async function IntegrationLogPage({
         date: sp.date ?? '',
         from: fromRaw,
         to: toRaw,
+        q: sp.q ?? '',
         customer: customerId !== null ? String(customerId) : '',
       }}
+      columnSearch={Object.fromEntries(
+        SEARCH_FIELDS.map((f) => [f, sp[searchParamName(f)] ?? '']),
+      )}
       fromOverview={fromOverview}
     />
   );

@@ -399,6 +399,47 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 [data-theme='modern'] .login-sub { color: var(--m-dim); }
 [data-theme='modern'] .login-error { color: #b91c1c; }
 
+/* Print -------------------------------------------------------
+   Used by the PRINT / PDF button: drop the chrome and controls so
+   the record table prints on white without the CRT styling. */
+@media print {
+  .sidebar,
+  .topbar,
+  .filters,
+  .scanlines,
+  .divider,
+  .footer-bar,
+  .ready,
+  .no-print {
+    display: none !important;
+  }
+  body,
+  .dashboard,
+  .crt-box {
+    background: #fff !important;
+    border: none !important;
+    animation: none !important;
+    color: #000 !important;
+  }
+  .content { padding: 0 !important; }
+  .title-text {
+    color: #000 !important;
+    text-shadow: none !important;
+    font-size: 18px !important;
+  }
+  .title-banner { border: none !important; background: none !important; padding: 0 0 10px !important; }
+  table { font-size: 10px !important; border-collapse: collapse !important; }
+  thead td { color: #000 !important; border-bottom: 1px solid #000 !important; }
+  tbody td { color: #000 !important; border-bottom: 1px solid #ddd !important; }
+  .cell-success, .cell-failed, .cell-mixed,
+  .status-success, .status-failed {
+    background: none !important;
+    color: #000 !important;
+  }
+  .notes, .row-cell, .rec-id, .response-text { color: #000 !important; }
+  tr { page-break-inside: avoid; }
+}
+
 /* Sidebar brand / logo ---------------------------------------
    Shown in both themes. The logo artwork is blue + orange on a
    transparent ground, so it needs a light plate to stay legible

@@ -1,8 +1,9 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Pagination from '@/components/Pagination';
+import { SEARCH_FIELDS } from '@/lib/recordColumns';
 
 type Row = {
   id: number;
@@ -101,6 +102,7 @@ export default function LogView({
   pageSize,
   page,
   filters,
+  columnSearch,
   fromOverview,
 }: {
   accountsList: { id: number; name: string }[];
@@ -109,12 +111,23 @@ export default function LogView({
   total: number;
   pageSize: number;
   page: number;
-  filters: { integration: string; result: string; date: string; from: string; to: string; customer: string };
+  filters: {
+    integration: string;
+    result: string;
+    date: string;
+    from: string;
+    to: string;
+    q: string;
+    customer: string;
+  };
+  columnSearch: Record<string, string>;
   fromOverview: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [openId, setOpenId] = useState<number | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [exportMsg, setExportMsg] = useState('');
 
   // Draft filter state. Edits stay local until SUBMIT so the table doesn't
   // re-query on every keystroke; the URL remains the applied state.
@@ -138,30 +151,112 @@ export default function LogView({
     });
   }, [filters.from, filters.to, filters.customer, filters.integration, filters.result]);
 
-  function applyFilters() {
-    const params = new URLSearchParams();
-    if (draft.from) params.set('from', draft.from);
-    if (draft.to) params.set('to', draft.to);
-    if (draft.customer) params.set('customer', draft.customer);
-    if (draft.integration && draft.integration !== 'ALL') params.set('integration', draft.integration);
-    if (draft.result && draft.result !== 'ALL') params.set('result', draft.result);
-    // Keep the chosen page size, but go back to page 1 — the old page number
-    // is meaningless against a different result set.
-    if (pageSize !== 25) params.set('size', String(pageSize));
+  // Search boxes (global + per column). These apply as you type, so they are
+  // kept separate from the SUBMIT-driven filter bar above.
+  const [search, setSearch] = useState<{ q: string; cols: Record<string, string> }>({
+    q: filters.q,
+    cols: columnSearch,
+  });
+  const typing = useRef(false);
 
+  useEffect(() => {
+    if (typing.current) return; // don't clobber what's being typed
+    setSearch({ q: filters.q, cols: columnSearch });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.q, JSON.stringify(columnSearch)]);
+
+  /** Mutate the current query string and navigate. Paging always resets,
+   *  because the old page number means nothing against a new result set. */
+  function pushWith(mutate: (p: URLSearchParams) => void) {
+    const params = new URLSearchParams(searchParams.toString());
+    mutate(params);
+    params.delete('page');
     setOpenId(null);
     const qs = params.toString();
     router.push(qs ? `/integration-log?${qs}` : '/integration-log');
+  }
+
+  // Debounced so a server round trip doesn't fire on every keystroke.
+  useEffect(() => {
+    if (!typing.current) return;
+    const t = setTimeout(() => {
+      typing.current = false;
+      pushWith((p) => {
+        search.q ? p.set('q', search.q) : p.delete('q');
+        for (const [field, value] of Object.entries(search.cols)) {
+          value ? p.set(`s_${field}`, value) : p.delete(`s_${field}`);
+        }
+      });
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  function setGlobalSearch(v: string) {
+    typing.current = true;
+    setSearch((s) => ({ ...s, q: v }));
+  }
+  function setColumnSearch(field: string, v: string) {
+    typing.current = true;
+    setSearch((s) => ({ ...s, cols: { ...s.cols, [field]: v } }));
+  }
+
+  function applyFilters() {
+    pushWith((params) => {
+      draft.from ? params.set('from', draft.from) : params.delete('from');
+      draft.to ? params.set('to', draft.to) : params.delete('to');
+      draft.customer ? params.set('customer', draft.customer) : params.delete('customer');
+      draft.integration && draft.integration !== 'ALL'
+        ? params.set('integration', draft.integration)
+        : params.delete('integration');
+      draft.result && draft.result !== 'ALL'
+        ? params.set('result', draft.result)
+        : params.delete('result');
+      params.delete('date'); // superseded by the from/to range
+    });
     // Re-fetch even when the URL is unchanged, so SUBMIT always pulls the
     // latest records without needing a browser refresh.
     router.refresh();
   }
 
   function resetFilters() {
+    typing.current = false;
     setDraft({ from: '', to: '', customer: '', integration: 'ALL', result: 'ALL' });
+    setSearch({ q: '', cols: {} });
     setOpenId(null);
     router.push('/integration-log');
     router.refresh();
+  }
+
+  /** Current filters as a query string, for the export endpoint. */
+  function exportQuery(extra?: Record<string, string>) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('page');
+    params.delete('size');
+    for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v);
+    return params.toString();
+  }
+
+  async function copyToClipboard() {
+    setBusy('COPY');
+    setExportMsg('');
+    try {
+      const res = await fetch(`/api/records/export?${exportQuery({ format: 'tsv' })}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      const lines = Math.max(0, text.split('\n').length - 1);
+      setExportMsg(`Copied ${lines} row${lines === 1 ? '' : 's'} to the clipboard.`);
+    } catch {
+      setExportMsg('Could not copy — your browser may block clipboard access on this page.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function downloadCsv() {
+    setExportMsg('');
+    window.location.href = `/api/records/export?${exportQuery()}`;
   }
 
   // Paging lives in the URL so a page is shareable and survives a refresh.
@@ -281,18 +376,51 @@ export default function LogView({
       <p className="notes" style={{ marginBottom: 14 }}>* Click a row for its payloads; payloads are kept for 24 hours, then cleared.</p>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['COPY', 'CSV', 'EXCEL', 'PDF', 'PRINT'].map((b) => (
-            <button key={b} className="submit-btn" style={{ padding: '5px 12px', fontSize: 12 }}>
-              {b}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} className="no-print">
+          <button
+            className="submit-btn"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+            onClick={copyToClipboard}
+            disabled={busy === 'COPY' || total === 0}
+            title="Copy all filtered rows to the clipboard"
+          >
+            {busy === 'COPY' ? 'COPYING…' : 'COPY'}
+          </button>
+          <button
+            className="submit-btn"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+            onClick={downloadCsv}
+            disabled={total === 0}
+            title="Download all filtered rows as CSV"
+          >
+            CSV
+          </button>
+          <button
+            className="submit-btn"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+            onClick={() => window.print()}
+            title="Print, or choose 'Save as PDF' in the print dialog"
+          >
+            PRINT / PDF
+          </button>
         </div>
-        <div>
+        <div className="no-print">
           <div className="filter-label" style={{ fontSize: 12 }}>&gt; SEARCH</div>
-          <input className="filter-field" placeholder="Search all..." style={{ minWidth: 160 }} />
+          <input
+            className="filter-field"
+            placeholder="Search all..."
+            value={search.q}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            style={{ minWidth: 160 }}
+          />
         </div>
       </div>
+
+      {exportMsg && (
+        <div className="notes" style={{ marginBottom: 10 }}>
+          {exportMsg}
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ fontSize: 12 }}>
@@ -310,10 +438,17 @@ export default function LogView({
               <td>RETRIES</td>
               <td>RESPONSE</td>
             </tr>
-            <tr>
-              {Array.from({ length: COLS }).map((_, i) => (
-                <td key={i} style={{ padding: '4px 6px' }}>
-                  <input className="filter-field" placeholder="Search..." style={{ minWidth: 0, width: '100%', fontSize: 11, padding: '3px 6px' }} />
+            <tr className="no-print">
+              {SEARCH_FIELDS.map((field) => (
+                <td key={field} style={{ padding: '4px 6px' }}>
+                  <input
+                    className="filter-field"
+                    placeholder="Search..."
+                    aria-label={`Search ${field}`}
+                    value={search.cols[field] ?? ''}
+                    onChange={(e) => setColumnSearch(field, e.target.value)}
+                    style={{ minWidth: 0, width: '100%', fontSize: 11, padding: '3px 6px' }}
+                  />
                 </td>
               ))}
             </tr>
