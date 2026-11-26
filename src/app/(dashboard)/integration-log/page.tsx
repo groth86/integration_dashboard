@@ -14,7 +14,9 @@ export default async function IntegrationLogPage({
 }: {
   searchParams: Promise<{
     integration?: string;
-    date?: string;
+    date?: string; // legacy single-day param (Overview drill-through)
+    from?: string;
+    to?: string;
     result?: string;
     customer?: string;
     page?: string;
@@ -39,12 +41,22 @@ export default async function IntegrationLogPage({
   }
   const accountIds = visibleAccounts.map((a) => a.id);
 
+  // Customer filter. The requested account is only honoured if it is one the
+  // session may already see — a hand-edited ?customer= must never widen access.
+  const requestedCustomer = Number(sp.customer);
+  const customerId =
+    Number.isFinite(requestedCustomer) && accountIds.includes(requestedCustomer)
+      ? requestedCustomer
+      : null;
+
   const conditions = [] as any[];
-  if (accountIds.length) {
-    conditions.push(inArray(integrationRecords.accountId, accountIds));
-  } else {
+  if (!accountIds.length) {
     // No accounts -> no data
     conditions.push(sql`false`);
+  } else if (customerId !== null) {
+    conditions.push(eq(integrationRecords.accountId, customerId));
+  } else {
+    conditions.push(inArray(integrationRecords.accountId, accountIds));
   }
 
   if (sp.integration && sp.integration !== 'ALL') {
@@ -53,14 +65,20 @@ export default async function IntegrationLogPage({
   if (sp.result && sp.result !== 'ALL') {
     conditions.push(eq(integrationRecords.status, sp.result));
   }
-  if (sp.date) {
-    const day = new Date(sp.date + 'T00:00:00');
-    if (!isNaN(day.getTime())) {
-      const dayEnd = new Date(day);
-      dayEnd.setHours(23, 59, 59, 999);
-      conditions.push(gte(integrationRecords.timestamp, day));
-      conditions.push(lte(integrationRecords.timestamp, dayEnd));
-    }
+
+  // Date range. `date` is the older single-day param kept working so existing
+  // Overview drill-through links and bookmarks don't break.
+  const fromRaw = sp.from || sp.date || '';
+  const toRaw = sp.to || sp.date || '';
+
+  const fromDate = fromRaw ? new Date(fromRaw + 'T00:00:00') : null;
+  if (fromDate && !isNaN(fromDate.getTime())) {
+    conditions.push(gte(integrationRecords.timestamp, fromDate));
+  }
+  const toDate = toRaw ? new Date(toRaw + 'T00:00:00') : null;
+  if (toDate && !isNaN(toDate.getTime())) {
+    toDate.setHours(23, 59, 59, 999); // inclusive of the whole end day
+    conditions.push(lte(integrationRecords.timestamp, toDate));
   }
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
@@ -122,9 +140,19 @@ export default async function IntegrationLogPage({
 
   const fromOverview = Boolean(sp.integration);
 
+  // Options for the INTEGRATION dropdown, taken from the data this session can
+  // actually see rather than a hardcoded list that may not match reality.
+  const typeRows = await db
+    .selectDistinct({ type: integrationRecords.integrationType })
+    .from(integrationRecords)
+    .where(accountIds.length ? inArray(integrationRecords.accountId, accountIds) : sql`false`)
+    .orderBy(integrationRecords.integrationType);
+  const integrationOptions = typeRows.map((t) => t.type).filter(Boolean);
+
   return (
     <LogView
       accountsList={visibleAccounts}
+      integrationOptions={integrationOptions}
       rows={rowsSerialized}
       total={count}
       pageSize={pageSize}
@@ -133,7 +161,9 @@ export default async function IntegrationLogPage({
         integration: sp.integration ?? 'ALL',
         result: sp.result ?? 'ALL',
         date: sp.date ?? '',
-        customer: sp.customer ?? '',
+        from: fromRaw,
+        to: toRaw,
+        customer: customerId !== null ? String(customerId) : '',
       }}
       fromOverview={fromOverview}
     />

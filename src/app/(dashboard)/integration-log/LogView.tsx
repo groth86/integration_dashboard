@@ -95,6 +95,7 @@ function RecordDetail({ id, colSpan }: { id: number; colSpan: number }) {
 
 export default function LogView({
   accountsList,
+  integrationOptions,
   rows,
   total,
   pageSize,
@@ -103,16 +104,65 @@ export default function LogView({
   fromOverview,
 }: {
   accountsList: { id: number; name: string }[];
+  integrationOptions: string[];
   rows: Row[];
   total: number;
   pageSize: number;
   page: number;
-  filters: { integration: string; result: string; date: string; customer: string };
+  filters: { integration: string; result: string; date: string; from: string; to: string; customer: string };
   fromOverview: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [openId, setOpenId] = useState<number | null>(null);
+
+  // Draft filter state. Edits stay local until SUBMIT so the table doesn't
+  // re-query on every keystroke; the URL remains the applied state.
+  const [draft, setDraft] = useState({
+    from: filters.from,
+    to: filters.to,
+    customer: filters.customer,
+    integration: filters.integration,
+    result: filters.result,
+  });
+
+  // Re-sync when the applied filters change from outside (Overview
+  // drill-through, browser back/forward).
+  useEffect(() => {
+    setDraft({
+      from: filters.from,
+      to: filters.to,
+      customer: filters.customer,
+      integration: filters.integration,
+      result: filters.result,
+    });
+  }, [filters.from, filters.to, filters.customer, filters.integration, filters.result]);
+
+  function applyFilters() {
+    const params = new URLSearchParams();
+    if (draft.from) params.set('from', draft.from);
+    if (draft.to) params.set('to', draft.to);
+    if (draft.customer) params.set('customer', draft.customer);
+    if (draft.integration && draft.integration !== 'ALL') params.set('integration', draft.integration);
+    if (draft.result && draft.result !== 'ALL') params.set('result', draft.result);
+    // Keep the chosen page size, but go back to page 1 — the old page number
+    // is meaningless against a different result set.
+    if (pageSize !== 25) params.set('size', String(pageSize));
+
+    setOpenId(null);
+    const qs = params.toString();
+    router.push(qs ? `/integration-log?${qs}` : '/integration-log');
+    // Re-fetch even when the URL is unchanged, so SUBMIT always pulls the
+    // latest records without needing a browser refresh.
+    router.refresh();
+  }
+
+  function resetFilters() {
+    setDraft({ from: '', to: '', customer: '', integration: 'ALL', result: 'ALL' });
+    setOpenId(null);
+    router.push('/integration-log');
+    router.refresh();
+  }
 
   // Paging lives in the URL so a page is shareable and survives a refresh.
   // Existing filter params are carried through untouched.
@@ -147,42 +197,83 @@ export default function LogView({
         </div>
       )}
 
-      <div className="filters">
+      <form
+        className="filters"
+        onSubmit={(e) => {
+          e.preventDefault();
+          applyFilters();
+        }}
+      >
         <div className="filter-group">
           <div className="filter-label">&gt; START_DATE</div>
-          <input className="filter-field" type="text" defaultValue={dateLabel} style={{ minWidth: 100 }} />
+          <input
+            className="filter-field"
+            type="date"
+            value={draft.from}
+            max={draft.to || undefined}
+            onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+            style={{ minWidth: 130 }}
+          />
         </div>
         <div className="filter-group">
           <div className="filter-label">&gt; END_DATE</div>
-          <input className="filter-field" type="text" defaultValue={dateLabel} style={{ minWidth: 100 }} />
+          <input
+            className="filter-field"
+            type="date"
+            value={draft.to}
+            min={draft.from || undefined}
+            onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+            style={{ minWidth: 130 }}
+          />
         </div>
         <div className="filter-group">
           <div className="filter-label">&gt; CUSTOMER</div>
-          <select className="filter-field blue" style={{ minWidth: 150 }}>
+          <select
+            className="filter-field blue"
+            value={draft.customer}
+            onChange={(e) => setDraft({ ...draft, customer: e.target.value })}
+            style={{ minWidth: 150 }}
+          >
+            <option value="">ALL CUSTOMERS</option>
             {accountsList.map((a) => (
-              <option key={a.id}>{a.name}</option>
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
             ))}
           </select>
         </div>
         <div className="filter-group">
           <div className="filter-label">&gt; INTEGRATION</div>
-          <select className="filter-field" defaultValue={filters.integration} style={{ minWidth: 120 }}>
-            <option>ALL</option>
-            <option>Inventory Update</option>
-            <option>Sales Order</option>
-            <option>Sales Order Fulfilment</option>
+          <select
+            className="filter-field"
+            value={draft.integration}
+            onChange={(e) => setDraft({ ...draft, integration: e.target.value })}
+            style={{ minWidth: 120 }}
+          >
+            <option value="ALL">ALL</option>
+            {integrationOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
         </div>
         <div className="filter-group">
           <div className="filter-label">&gt; RESULT</div>
-          <select className="filter-field" defaultValue={filters.result} style={{ minWidth: 90 }}>
-            <option>ALL</option>
-            <option>Success</option>
-            <option>Failed</option>
+          <select
+            className="filter-field"
+            value={draft.result}
+            onChange={(e) => setDraft({ ...draft, result: e.target.value })}
+            style={{ minWidth: 90 }}
+          >
+            <option value="ALL">ALL</option>
+            <option value="Success">Success</option>
+            <option value="Failed">Failed</option>
           </select>
         </div>
-        <button className="submit-btn">[ SUBMIT ]</button>
-      </div>
+        <button className="submit-btn" type="submit">[ SUBMIT ]</button>
+        <button className="submit-btn" type="button" onClick={resetFilters}>[ RESET ]</button>
+      </form>
 
       <div className="divider">{'═'.repeat(120)}</div>
       <p className="notes">* Records processed more than once show the latest occurrence and status.</p>
