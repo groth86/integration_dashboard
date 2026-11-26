@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Fragment, useEffect, useState, useCallback } from 'react';
 import Pagination, { clampPage } from '@/components/Pagination';
 
 type Account = { id: number; name: string };
@@ -32,6 +32,52 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
   // Users are fetched in full, so the table pages locally.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Admin password reset, one row at a time.
+  const [pwUserId, setPwUserId] = useState<number | null>(null);
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean }>({ text: '', ok: true });
+
+  function openPasswordFor(id: number) {
+    setPwUserId(pwUserId === id ? null : id);
+    setPwNew('');
+    setPwConfirm('');
+    setPwMsg({ text: '', ok: true });
+  }
+
+  async function savePassword(user: UserRow) {
+    if (pwNew.length < 8) {
+      setPwMsg({ text: 'Password must be at least 8 characters.', ok: false });
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwMsg({ text: 'Passwords do not match.', ok: false });
+      return;
+    }
+    setPwSaving(true);
+    setPwMsg({ text: '', ok: true });
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwNew }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setPwMsg({ text: `Password updated for "${user.username}".`, ok: true });
+        setPwNew('');
+        setPwConfirm('');
+      } else {
+        setPwMsg({ text: data.error || 'Failed to update password', ok: false });
+      }
+    } catch {
+      setPwMsg({ text: 'Network error', ok: false });
+    } finally {
+      setPwSaving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     const [aRes, uRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/users')]);
@@ -304,7 +350,8 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
             </thead>
             <tbody>
               {visibleUsers.map((u) => (
-                <tr key={u.id}>
+                <Fragment key={u.id}>
+                <tr>
                   <td className="row-cell">{u.username}</td>
                   <td className="role-tag">{u.role}</td>
                   <td>
@@ -326,6 +373,14 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
                     >
                       {manageUserId === u.id ? 'SELECTED' : 'MANAGE'}
                     </button>
+                    <button
+                      className="submit-btn"
+                      style={{ padding: '3px 12px', fontSize: 11, marginRight: 6 }}
+                      onClick={() => openPasswordFor(u.id)}
+                      title={`Set a new password for ${u.username}`}
+                    >
+                      {pwUserId === u.id ? 'CANCEL' : 'PASSWORD'}
+                    </button>
                     {String(u.id) !== currentUserId && (
                       <button className="icon-btn" onClick={() => deleteUser(u.id, u.username)}>
                         DELETE
@@ -333,6 +388,58 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
                     )}
                   </td>
                 </tr>
+
+                {pwUserId === u.id && (
+                  <tr>
+                    <td colSpan={4} style={{ padding: '10px 12px' }}>
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          savePassword(u);
+                        }}
+                      >
+                        <div className="filter-label" style={{ marginBottom: 8 }}>
+                          &gt; SET PASSWORD FOR {u.username.toUpperCase()}
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                          <div className="filter-group">
+                            <div className="filter-label">&gt; NEW PASSWORD</div>
+                            <input
+                              className="filter-field"
+                              type="password"
+                              autoComplete="new-password"
+                              value={pwNew}
+                              onChange={(e) => setPwNew(e.target.value)}
+                              style={{ minWidth: 170 }}
+                            />
+                          </div>
+                          <div className="filter-group">
+                            <div className="filter-label">&gt; CONFIRM</div>
+                            <input
+                              className="filter-field"
+                              type="password"
+                              autoComplete="new-password"
+                              value={pwConfirm}
+                              onChange={(e) => setPwConfirm(e.target.value)}
+                              style={{ minWidth: 170 }}
+                            />
+                          </div>
+                          <button className="submit-btn" type="submit" disabled={pwSaving}>
+                            {pwSaving ? '[ SAVING... ]' : '[ SET PASSWORD ]'}
+                          </button>
+                        </div>
+                        <div className={`form-msg ${pwMsg.ok ? 'ok' : 'err'}`}>{pwMsg.text}</div>
+                        <div className="notes">
+                          Minimum 8 characters. The user is not notified — tell them the new password
+                          yourself, and have them change it afterwards.
+                          {String(u.id) === currentUserId &&
+                            ' This is your own account: you will stay logged in on this device.'}
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

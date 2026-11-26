@@ -401,6 +401,16 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 [data-theme='modern'] .login-sub { color: var(--m-dim); }
 [data-theme='modern'] .login-error { color: #b91c1c; }
 
+/* Change-my-password panel ------------------------------------ */
+.pw-panel {
+  border-bottom: 1px solid var(--green-border);
+  padding: 14px 22px 12px;
+}
+[data-theme='modern'] .pw-panel {
+  background: var(--m-card);
+  border-bottom: 1px solid var(--m-border);
+}
+
 /* Summary tiles ----------------------------------------------- */
 .tiles {
   display: grid;
