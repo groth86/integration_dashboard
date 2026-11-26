@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Pagination from '@/components/Pagination';
 import { SEARCH_FIELDS } from '@/lib/recordColumns';
@@ -130,6 +130,7 @@ export default function LogView({
   const [openId, setOpenId] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [exportMsg, setExportMsg] = useState('');
+  const [isPending, startTransition] = useTransition();
 
   // Tile figures. Statuses other than Success/Failed are possible — the
   // monitor passes through anything it can't confidently normalise — so they
@@ -180,14 +181,30 @@ export default function LogView({
   }, [filters.q, JSON.stringify(columnSearch)]);
 
   /** Mutate the current query string and navigate. Paging always resets,
-   *  because the old page number means nothing against a new result set. */
-  function pushWith(mutate: (p: URLSearchParams) => void) {
+   *  because the old page number means nothing against a new result set.
+   *
+   *  Navigation runs inside a transition so the current table stays on screen
+   *  (dimmed) while the server responds, instead of the page appearing to
+   *  freeze — the data round trip is the slow part, not the rendering. */
+  function pushWith(mutate: (p: URLSearchParams) => void, opts?: { keepPage?: boolean }) {
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
-    params.delete('page');
+    if (!opts?.keepPage) params.delete('page');
     setOpenId(null);
+
     const qs = params.toString();
-    router.push(qs ? `/integration-log?${qs}` : '/integration-log');
+    const next = qs ? `/integration-log?${qs}` : '/integration-log';
+    const unchanged = qs === searchParams.toString();
+
+    startTransition(() => {
+      if (unchanged) {
+        // Same filters re-submitted: re-query rather than no-op, so SUBMIT
+        // always pulls the latest records.
+        router.refresh();
+      } else {
+        router.push(next);
+      }
+    });
   }
 
   // Debounced so a server round trip doesn't fire on every keystroke.
@@ -201,7 +218,7 @@ export default function LogView({
           value ? p.set(`s_${field}`, value) : p.delete(`s_${field}`);
         }
       });
-    }, 400);
+    }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
@@ -216,6 +233,7 @@ export default function LogView({
   }
 
   function applyFilters() {
+    typing.current = false;
     pushWith((params) => {
       draft.from ? params.set('from', draft.from) : params.delete('from');
       draft.to ? params.set('to', draft.to) : params.delete('to');
@@ -228,9 +246,6 @@ export default function LogView({
         : params.delete('result');
       params.delete('date'); // superseded by the from/to range
     });
-    // Re-fetch even when the URL is unchanged, so SUBMIT always pulls the
-    // latest records without needing a browser refresh.
-    router.refresh();
   }
 
   function resetFilters() {
@@ -238,8 +253,7 @@ export default function LogView({
     setDraft({ from: '', to: '', customer: '', integration: 'ALL', result: 'ALL' });
     setSearch({ q: '', cols: {} });
     setOpenId(null);
-    router.push('/integration-log');
-    router.refresh();
+    startTransition(() => router.push('/integration-log'));
   }
 
   /** Current filters as a query string, for the export endpoint. */
@@ -459,7 +473,9 @@ export default function LogView({
         </div>
 
         <div className="no-print">
-          <div className="filter-label" style={{ fontSize: 12 }}>&gt; SEARCH</div>
+          <div className="filter-label" style={{ fontSize: 12 }}>
+            &gt; SEARCH{isPending ? ' · WORKING…' : ''}
+          </div>
           <input
             className="filter-field"
             placeholder="Search all..."
@@ -476,7 +492,14 @@ export default function LogView({
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
+      <div
+        style={{
+          overflowX: 'auto',
+          opacity: isPending ? 0.5 : 1,
+          transition: 'opacity 120ms ease',
+        }}
+        aria-busy={isPending}
+      >
         <table style={{ fontSize: 12 }}>
           <thead>
             <tr>
