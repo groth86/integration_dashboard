@@ -6,12 +6,20 @@ import LogView from './LogView';
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
+const ALLOWED_PAGE_SIZES = [25, 50, 100, 0]; // 0 = All
 
 export default async function IntegrationLogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ integration?: string; date?: string; result?: string; customer?: string }>;
+  searchParams: Promise<{
+    integration?: string;
+    date?: string;
+    result?: string;
+    customer?: string;
+    page?: string;
+    size?: string;
+  }>;
 }) {
   const session = await getSession();
   if (!session) return null;
@@ -57,6 +65,23 @@ export default async function IntegrationLogPage({
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
+  // Count first so an out-of-range page (hand-edited URL, or a filter that
+  // shrank the result set) can be clamped instead of showing an empty table.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(integrationRecords)
+    .where(whereClause);
+
+  const requestedSize = Number(sp.size);
+  const pageSize = ALLOWED_PAGE_SIZES.includes(requestedSize) ? requestedSize : DEFAULT_PAGE_SIZE;
+
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(count / pageSize)) : 1;
+  const requestedPage = Number(sp.page);
+  const page = Number.isFinite(requestedPage) && requestedPage >= 1
+    ? Math.min(Math.trunc(requestedPage), totalPages)
+    : 1;
+  const offset = pageSize > 0 ? (page - 1) * pageSize : 0;
+
   const rows = await db
     .select({
       id: integrationRecords.id,
@@ -79,13 +104,11 @@ export default async function IntegrationLogPage({
     })
     .from(integrationRecords)
     .where(whereClause)
-    .orderBy(desc(integrationRecords.timestamp))
-    .limit(PAGE_SIZE);
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(integrationRecords)
-    .where(whereClause);
+    // Secondary sort on id keeps the order stable across pages when several
+    // records share a timestamp — without it, rows can repeat or go missing.
+    .orderBy(desc(integrationRecords.timestamp), desc(integrationRecords.id))
+    .limit(pageSize > 0 ? pageSize : count || 1)
+    .offset(offset);
 
   const rowsSerialized = rows.map((r) => ({
     ...r,
@@ -104,7 +127,8 @@ export default async function IntegrationLogPage({
       accountsList={visibleAccounts}
       rows={rowsSerialized}
       total={count}
-      pageSize={PAGE_SIZE}
+      pageSize={pageSize}
+      page={page}
       filters={{
         integration: sp.integration ?? 'ALL',
         result: sp.result ?? 'ALL',

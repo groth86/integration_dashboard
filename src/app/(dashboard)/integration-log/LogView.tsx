@@ -1,6 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Pagination from '@/components/Pagination';
 
 type Row = {
   id: number;
@@ -96,6 +98,7 @@ export default function LogView({
   rows,
   total,
   pageSize,
+  page,
   filters,
   fromOverview,
 }: {
@@ -103,11 +106,27 @@ export default function LogView({
   rows: Row[];
   total: number;
   pageSize: number;
+  page: number;
   filters: { integration: string; result: string; date: string; customer: string };
   fromOverview: boolean;
 }) {
-  const shownTo = Math.min(rows.length, pageSize);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [openId, setOpenId] = useState<number | null>(null);
+
+  // Paging lives in the URL so a page is shareable and survives a refresh.
+  // Existing filter params are carried through untouched.
+  function go(next: { page?: number; size?: number }) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next.size !== undefined) {
+      params.set('size', String(next.size));
+      params.delete('page'); // a new page size invalidates the old page number
+    }
+    if (next.page !== undefined) params.set('page', String(next.page));
+    setOpenId(null); // collapse any expanded row on navigation
+    router.push(`/integration-log?${params.toString()}`);
+  }
+
   const COLS = 11;
   const dateLabel = filters.date
     ? new Date(filters.date + 'T00:00:00').toLocaleDateString('en-GB')
@@ -172,7 +191,7 @@ export default function LogView({
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['SHOW 25 ▾', 'COPY', 'CSV', 'EXCEL', 'PDF', 'PRINT'].map((b) => (
+          {['COPY', 'CSV', 'EXCEL', 'PDF', 'PRINT'].map((b) => (
             <button key={b} className="submit-btn" style={{ padding: '5px 12px', fontSize: 12 }}>
               {b}
             </button>
@@ -245,11 +264,13 @@ export default function LogView({
         </table>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, flexWrap: 'wrap', gap: 10, fontSize: 12 }}>
-        <div style={{ color: 'var(--text-muted)' }}>
-          Showing {total === 0 ? 0 : 1} to {shownTo} of {total} entries
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPage={(p) => go({ page: p })}
+        onPageSize={(s) => go({ size: s })}
+      />
 
       <div className="footer-bar">{'═'.repeat(120)}</div>
       <div className="ready">READY<span className="crt-cursor">_</span></div>

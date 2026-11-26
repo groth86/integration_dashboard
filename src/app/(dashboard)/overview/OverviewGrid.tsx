@@ -1,6 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import Pagination, { clampPage } from '@/components/Pagination';
 
 type Agg = Record<string, Record<string, { success: number; total: number }>>;
 
@@ -20,6 +22,16 @@ export default function OverviewGrid({
   endLabel: string;
 }) {
   const router = useRouter();
+
+  // The full grid is already in memory, so paging is local — no round trip.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const total = integrationTypes.length;
+  const current = clampPage(page, total, pageSize);
+  const visibleTypes =
+    pageSize > 0
+      ? integrationTypes.slice((current - 1) * pageSize, current * pageSize)
+      : integrationTypes;
 
   function cellClass(cell?: { success: number; total: number }) {
     if (!cell || cell.total === 0) return 'cell-empty';
@@ -81,7 +93,7 @@ export default function OverviewGrid({
                 </td>
               </tr>
             )}
-            {integrationTypes.map((type) => (
+            {visibleTypes.map((type) => (
               <tr key={type}>
                 <td>{type}</td>
                 {days.map((d) => {
@@ -102,6 +114,18 @@ export default function OverviewGrid({
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={current}
+        pageSize={pageSize}
+        total={total}
+        onPage={setPage}
+        onPageSize={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+        label="integrations"
+      />
 
       <div className="footer-bar">{'═'.repeat(120)}</div>
       <div className="ready">

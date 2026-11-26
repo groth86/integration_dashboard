@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Pagination, { clampPage } from '@/components/Pagination';
 
 type Account = { id: number; name: string };
 type UserRow = {
@@ -27,6 +28,10 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
   const [manageUserId, setManageUserId] = useState<number | null>(null);
   const [busyAccountId, setBusyAccountId] = useState<number | null>(null);
   const [accessMsg, setAccessMsg] = useState<{ text: string; ok: boolean }>({ text: '', ok: true });
+
+  // Users are fetched in full, so the table pages locally.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     const [aRes, uRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/users')]);
@@ -127,6 +132,10 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
     setManageUserId(id);
     setAccessMsg({ text: '', ok: true });
   }
+
+  const currentPage = clampPage(page, users.length, pageSize);
+  const visibleUsers =
+    pageSize > 0 ? users.slice((currentPage - 1) * pageSize, currentPage * pageSize) : users;
 
   return (
     <>
@@ -294,7 +303,7 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {visibleUsers.map((u) => (
                 <tr key={u.id}>
                   <td className="row-cell">{u.username}</td>
                   <td className="role-tag">{u.role}</td>
@@ -328,6 +337,17 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={users.length}
+          onPage={setPage}
+          onPageSize={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+          label="users"
+        />
       </div>
 
       <div className="footer-bar">{'═'.repeat(120)}</div>
