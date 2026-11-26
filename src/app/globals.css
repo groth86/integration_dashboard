@@ -188,20 +188,19 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 }
 [data-theme='modern'] .sidebar-brand {
   display: block;
-  padding: 20px 18px 22px;
+  padding: 16px 16px 18px;
   background: var(--m-navy-deep);
+  border-bottom: none;
 }
-[data-theme='modern'] .sidebar-brand .brand-name {
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 1.2px;
+[data-theme='modern'] .brand-logo {
+  padding: 8px 10px;
+  border-radius: 6px;
 }
 [data-theme='modern'] .sidebar-brand .brand-sub {
   color: rgba(255, 255, 255, 0.5);
   font-size: 10px;
   letter-spacing: 1.4px;
-  margin-top: 3px;
+  margin-top: 10px;
 }
 [data-theme='modern'] .sidebar-label {
   color: rgba(255, 255, 255, 0.4);
@@ -400,5 +399,26 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 [data-theme='modern'] .login-sub { color: var(--m-dim); }
 [data-theme='modern'] .login-error { color: #b91c1c; }
 
-/* Brand block is modern-only --------------------------------- */
-.sidebar-brand { display: none; }
+/* Sidebar brand / logo ---------------------------------------
+   Shown in both themes. The logo artwork is blue + orange on a
+   transparent ground, so it needs a light plate to stay legible
+   against the dark retro sidebar and the navy modern one. */
+.sidebar-brand {
+  display: block;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--green-border);
+}
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  padding: 7px 9px;
+  border-radius: 3px;
+}
+.brand-sub {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  margin-top: 8px;
+}

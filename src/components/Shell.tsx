@@ -72,7 +72,15 @@ export default function Shell({
 
         <nav className="sidebar">
           <div className="sidebar-brand">
-            <div className="brand-name">CLOUDX SYSTEMS</div>
+            {/* Served from public/. Plain <img> rather than next/image: the
+                asset is an SVG, so there is nothing to optimise. */}
+            <img
+              className="brand-logo"
+              src="/cloudx-logo.svg"
+              alt="CloudX Systems"
+              width={280}
+              height={108}
+            />
             <div className="brand-sub">INTEGRATION MONITORING</div>
           </div>
           <div className="sidebar-label">MAIN MENU</div>
