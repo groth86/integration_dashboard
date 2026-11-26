@@ -99,6 +99,7 @@ export default function LogView({
   integrationOptions,
   rows,
   total,
+  statusSummary,
   pageSize,
   page,
   filters,
@@ -109,6 +110,7 @@ export default function LogView({
   integrationOptions: string[];
   rows: Row[];
   total: number;
+  statusSummary: { status: string; count: number }[];
   pageSize: number;
   page: number;
   filters: {
@@ -128,6 +130,18 @@ export default function LogView({
   const [openId, setOpenId] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [exportMsg, setExportMsg] = useState('');
+
+  // Tile figures. Statuses other than Success/Failed are possible — the
+  // monitor passes through anything it can't confidently normalise — so they
+  // are counted separately rather than silently dropped from the totals.
+  const countFor = (s: string) =>
+    statusSummary.find((r) => r.status?.toLowerCase() === s)?.count ?? 0;
+  const successCount = countFor('success');
+  const failedCount = countFor('failed');
+  const otherCount = Math.max(0, total - successCount - failedCount);
+  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
+  const successPct = pct(successCount);
+  const failedPct = pct(failedCount);
 
   // Draft filter state. Edits stay local until SUBMIT so the table doesn't
   // re-query on every keystroke; the URL remains the applied state.
@@ -371,12 +385,25 @@ export default function LogView({
       </form>
 
       <div className="divider">{'═'.repeat(120)}</div>
-      <p className="notes">* Records processed more than once show the latest occurrence and status.</p>
-      <p className="notes">* RETRIES counts the extra attempts before the outcome shown.</p>
-      <p className="notes" style={{ marginBottom: 14 }}>* Click a row for its payloads; payloads are kept for 24 hours, then cleared.</p>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} className="no-print">
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: 14,
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <div style={{ flex: '0 1 auto' }}>
+          <p className="notes">* Records processed more than once show the latest occurrence and status.</p>
+          <p className="notes">* RETRIES counts the extra attempts before the outcome shown.</p>
+          <p className="notes" style={{ marginBottom: 12 }}>
+            * Click a row for its payloads; payloads are kept for 24 hours, then cleared.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} className="no-print">
           <button
             className="submit-btn"
             style={{ padding: '5px 12px', fontSize: 12 }}
@@ -403,7 +430,34 @@ export default function LogView({
           >
             PRINT / PDF
           </button>
+          </div>
         </div>
+
+        <div className="tiles" style={{ flex: '1 1 300px', maxWidth: 520 }}>
+          <div className="tile">
+            <div className="tile-label">&gt; TOTAL</div>
+            <div className="tile-value">{total.toLocaleString()}</div>
+            <div className="tile-sub">records matching filters</div>
+          </div>
+          <div className="tile">
+            <div className="tile-label">&gt; SUCCESS</div>
+            <div className="tile-value ok">{successCount.toLocaleString()}</div>
+            <div className="tile-sub">{total ? `${successPct}% of total` : '—'}</div>
+          </div>
+          <div className="tile">
+            <div className="tile-label">&gt; FAILED</div>
+            <div className="tile-value bad">{failedCount.toLocaleString()}</div>
+            <div className="tile-sub">{total ? `${failedPct}% of total` : '—'}</div>
+          </div>
+          {otherCount > 0 && (
+            <div className="tile">
+              <div className="tile-label">&gt; OTHER</div>
+              <div className="tile-value">{otherCount.toLocaleString()}</div>
+              <div className="tile-sub">non-standard status</div>
+            </div>
+          )}
+        </div>
+
         <div className="no-print">
           <div className="filter-label" style={{ fontSize: 12 }}>&gt; SEARCH</div>
           <input

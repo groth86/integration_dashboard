@@ -31,6 +31,15 @@ export default async function IntegrationLogPage({
     .from(integrationRecords)
     .where(whereClause);
 
+  // Status breakdown for the summary tiles. Uses the same WHERE clause as the
+  // table, so it reflects every active filter (customer, date range, search)
+  // and counts all matching records — not just the page on screen.
+  const statusRows = await db
+    .select({ status: integrationRecords.status, count: sql<number>`count(*)::int` })
+    .from(integrationRecords)
+    .where(whereClause)
+    .groupBy(integrationRecords.status);
+
   const requestedSize = Number(sp.size);
   const pageSize = ALLOWED_PAGE_SIZES.includes(requestedSize) ? requestedSize : DEFAULT_PAGE_SIZE;
 
@@ -96,6 +105,7 @@ export default async function IntegrationLogPage({
       integrationOptions={integrationOptions}
       rows={rowsSerialized}
       total={count}
+      statusSummary={statusRows}
       pageSize={pageSize}
       page={page}
       filters={{
