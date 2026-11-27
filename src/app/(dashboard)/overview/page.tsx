@@ -1,7 +1,8 @@
-import { and, gte, lte, inArray, eq } from 'drizzle-orm';
+import { and, gte, lte, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { integrationRecords, accounts, userAccounts } from '@/db/schema';
+import { integrationRecords } from '@/db/schema';
 import { getSession } from '@/lib/auth';
+import { getVisibleAccounts } from '@/lib/recordFilters';
 import OverviewGrid from './OverviewGrid';
 
 export const dynamic = 'force-dynamic';
@@ -16,18 +17,9 @@ export default async function OverviewPage() {
   const session = await getSession();
   if (!session) return null;
 
-  // Accounts this user may see
-  let visibleAccounts: { id: number; name: string }[] = [];
-  if (session.role === 'admin') {
-    visibleAccounts = await db.select({ id: accounts.id, name: accounts.name }).from(accounts).orderBy(accounts.name);
-  } else {
-    visibleAccounts = await db
-      .select({ id: accounts.id, name: accounts.name })
-      .from(userAccounts)
-      .innerJoin(accounts, eq(userAccounts.accountId, accounts.id))
-      .where(eq(userAccounts.userId, Number(session.sub)))
-      .orderBy(accounts.name);
-  }
+  // Shared helper, so account visibility rules (including the inactive filter)
+  // live in one place rather than being duplicated per page.
+  const visibleAccounts = await getVisibleAccounts(session);
 
   // Default window: trailing 8 days ending today
   const end = startOfDay(new Date());

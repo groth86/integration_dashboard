@@ -58,16 +58,26 @@ function contains(expr: SQL, term: string): SQL {
 
 export type RecordQueryParams = Record<string, string | undefined>;
 
-/** Accounts this session is allowed to see. Admins see everything. */
+/**
+ * Accounts this session is allowed to see. Admins see everything.
+ *
+ * Inactive accounts are excluded everywhere — that is the single chokepoint
+ * that keeps them out of grids, dropdowns, filters and exports. Only the
+ * Account Management screen asks for them, via its own admin-only query.
+ */
 export async function getVisibleAccounts(session: { sub: string; role: string }) {
   if (session.role === 'admin') {
-    return db.select({ id: accounts.id, name: accounts.name }).from(accounts).orderBy(accounts.name);
+    return db
+      .select({ id: accounts.id, name: accounts.name })
+      .from(accounts)
+      .where(eq(accounts.isActive, true))
+      .orderBy(accounts.name);
   }
   return db
     .select({ id: accounts.id, name: accounts.name })
     .from(userAccounts)
     .innerJoin(accounts, eq(userAccounts.accountId, accounts.id))
-    .where(eq(userAccounts.userId, Number(session.sub)))
+    .where(and(eq(userAccounts.userId, Number(session.sub)), eq(accounts.isActive, true)))
     .orderBy(accounts.name);
 }
 

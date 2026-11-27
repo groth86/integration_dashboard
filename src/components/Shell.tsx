@@ -7,12 +7,14 @@ import Link from 'next/link';
 const NAV = [
   { href: '/overview', label: 'ACCOUNT OVERVIEW', adminOnly: false },
   { href: '/integration-log', label: 'INTEGRATION LOG', adminOnly: false },
+  { href: '/accounts', label: 'ACCOUNTS', adminOnly: true },
   { href: '/users', label: 'USERS', adminOnly: true },
 ];
 
 const SYS_LABEL: Record<string, string> = {
   '/overview': 'SYS://ACCOUNT-OVERVIEW',
   '/integration-log': 'SYS://INTEGRATION-LOG',
+  '/accounts': 'SYS://ACCOUNT-MANAGEMENT',
   '/users': 'SYS://USER-MANAGEMENT',
 };
 

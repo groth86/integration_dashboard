@@ -3,6 +3,7 @@ import {
   serial,
   text,
   timestamp,
+  boolean,
   integer,
   primaryKey,
   uniqueIndex,
@@ -41,6 +42,10 @@ export const users = pgTable('users', {
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
   name: text('name').notNull().unique(),
+  // Inactive accounts are hidden from every screen, dropdown and export except
+  // the Account Management page. Nothing is deleted — reactivating brings the
+  // account and all its history straight back.
+  isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

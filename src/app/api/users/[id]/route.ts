@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, userAccounts, accounts } from '@/db/schema';
 import { getSession } from '@/lib/auth';
@@ -46,7 +46,11 @@ export async function PATCH(
     // Replace assignments
     await db.delete(userAccounts).where(eq(userAccounts.userId, userId));
     if (accountIds.length) {
-      const valid = await db.select({ id: accounts.id }).from(accounts).where(inArray(accounts.id, accountIds));
+      // Active accounts only — an inactive one must not be assignable.
+      const valid = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(inArray(accounts.id, accountIds), eq(accounts.isActive, true)));
       const validIds = valid.map((v) => v.id);
       if (validIds.length) {
         await db.insert(userAccounts).values(validIds.map((accountId) => ({ userId, accountId })));

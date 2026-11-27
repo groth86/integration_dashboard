@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, userAccounts, accounts } from '@/db/schema';
 import { getSession } from '@/lib/auth';
@@ -39,7 +39,10 @@ export async function GET() {
       accountName: accounts.name,
     })
     .from(userAccounts)
-    .innerJoin(accounts, eq(userAccounts.accountId, accounts.id));
+    .innerJoin(accounts, eq(userAccounts.accountId, accounts.id))
+    // Inactive accounts stay hidden here too. The underlying assignment row is
+    // untouched, so reactivating the account restores it for that user.
+    .where(eq(accounts.isActive, true));
 
   const result = allUsers.map((u) => ({
     ...u,
@@ -78,8 +81,11 @@ export async function POST(req: Request) {
 
   const ids: number[] = Array.isArray(accountIds) ? accountIds : [];
   if (ids.length) {
-    // Only assign accounts that actually exist
-    const valid = await db.select({ id: accounts.id }).from(accounts).where(inArray(accounts.id, ids));
+    // Only assign accounts that exist and are active
+    const valid = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(inArray(accounts.id, ids), eq(accounts.isActive, true)));
     const validIds = valid.map((v) => v.id);
     if (validIds.length) {
       await db

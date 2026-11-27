@@ -131,10 +131,17 @@ async function resolveAccounts(names: string[], createMissing: boolean): Promise
   const unique = [...new Set(names)];
   if (!unique.length) return map;
   if (createMissing) {
+    // Live data for an account reactivates it: receiving records means the
+    // integration is running again, so hiding it would misrepresent reality.
+    // Note the consequence — deactivating an account that is still sending
+    // data will flip back on at the next delivery.
     await db
       .insert(accounts)
       .values(unique.map((name) => ({ name })))
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: accounts.name,
+        set: { isActive: true },
+      });
   }
   const rows = await db.select({ id: accounts.id, name: accounts.name }).from(accounts);
   const wanted = new Set(unique);
