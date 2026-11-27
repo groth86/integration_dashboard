@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, userAccounts, accounts } from '@/db/schema';
 import { getSession } from '@/lib/auth';
@@ -33,7 +33,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+    // Bump tokenVersion so all of the target's existing sessions are rejected.
+    // Deliberately no createSession here: even if an admin resets their own
+    // password via this route, they get signed out and must log in again.
+    await db
+      .update(users)
+      .set({ passwordHash, tokenVersion: sql`${users.tokenVersion} + 1` })
+      .where(eq(users.id, userId));
   }
 
   if (Array.isArray(accountIds)) {

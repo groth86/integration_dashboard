@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { getSession } from '@/lib/auth';
+import { getSession, createSession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,7 +67,22 @@ export async function POST(req: Request) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+  // Bump tokenVersion atomically: every other signed-in session for this user
+  // stops validating.
+  const [updated] = await db
+    .update(users)
+    .set({ passwordHash, tokenVersion: sql`${users.tokenVersion} + 1` })
+    .where(eq(users.id, user.id))
+    .returning({ tokenVersion: users.tokenVersion });
+
+  // Re-issue this device's cookie with the new version so the user who just
+  // changed their password stays signed in here.
+  await createSession({
+    sub: String(user.id),
+    username: user.username,
+    role: user.role,
+    tokenVersion: updated.tokenVersion,
+  });
 
   return NextResponse.json({ ok: true });
 }

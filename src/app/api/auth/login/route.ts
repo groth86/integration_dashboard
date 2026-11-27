@@ -16,6 +16,8 @@ export async function POST(req: Request) {
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
   }
-  await createSession({ sub: String(user.id), username: user.username, role: user.role });
+  await createSession({ sub: String(user.id), username: user.username, role: user.role,
+    tokenVersion: user.tokenVersion,
+  });
   return NextResponse.json({ ok: true });
 }

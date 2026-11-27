@@ -16,6 +16,9 @@ export const users = pgTable('users', {
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('user'), // 'admin' | 'user'
+  // Bumped on every password change; session JWTs carry the value they were
+  // issued with, so bumping it signs the user out everywhere else.
+  tokenVersion: integer('token_version').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
