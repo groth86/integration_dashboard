@@ -24,6 +24,10 @@ export async function GET() {
       username: users.username,
       role: users.role,
       createdAt: users.createdAt,
+      lastLoginAt: users.lastLoginAt,
+      lastSeenAt: users.lastSeenAt,
+      failedLoginCount: users.failedLoginCount,
+      lastFailedLoginAt: users.lastFailedLoginAt,
     })
     .from(users)
     .orderBy(users.username);

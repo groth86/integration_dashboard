@@ -9,8 +9,39 @@ type UserRow = {
   username: string;
   role: string;
   createdAt: string;
+  lastLoginAt: string | null;
+  lastSeenAt: string | null;
+  failedLoginCount: number;
+  lastFailedLoginAt: string | null;
   accounts: { id: number; name: string }[];
 };
+
+// Matches SEEN_REFRESH_MS in src/lib/auth.ts, plus a little slack: activity is
+// only recorded every 5 minutes, so a stricter window would flicker offline.
+const ONLINE_WINDOW_MS = 6 * 60 * 1000;
+
+function isOnline(lastSeenAt: string | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_WINDOW_MS;
+}
+
+/** "3 min ago", "2 hours ago", "5 days ago" — or absolute once it is old. */
+function ago(iso: string | null): string {
+  if (!iso) return 'never';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(iso).toLocaleDateString('en-GB');
+}
+
+function fullStamp(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString('en-GB') : 'never signed in';
+}
 
 export default function UsersManager({ currentUserId }: { currentUserId: string }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -344,6 +375,8 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
               <tr>
                 <td>USERNAME</td>
                 <td>ROLE</td>
+                <td>STATUS</td>
+                <td>LAST LOGIN</td>
                 <td>ASSIGNED ACCOUNTS</td>
                 <td></td>
               </tr>
@@ -354,6 +387,24 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
                 <tr>
                   <td className="row-cell">{u.username}</td>
                   <td className="role-tag">{u.role}</td>
+                  <td style={{ whiteSpace: 'nowrap' }} title={`Last activity: ${fullStamp(u.lastSeenAt)}`}>
+                    {isOnline(u.lastSeenAt) ? (
+                      <span style={{ color: 'var(--green)' }}>● ONLINE</span>
+                    ) : (
+                      <span className="cell-empty">{u.lastSeenAt ? ago(u.lastSeenAt) : '—'}</span>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }} title={fullStamp(u.lastLoginAt)}>
+                    <span className="row-cell">{ago(u.lastLoginAt)}</span>
+                    {u.failedLoginCount > 0 && (
+                      <div
+                        style={{ color: 'var(--red)', fontSize: 11 }}
+                        title={`Most recent failure: ${fullStamp(u.lastFailedLoginAt)}`}
+                      >
+                        {u.failedLoginCount} failed since
+                      </div>
+                    )}
+                  </td>
                   <td>
                     {u.accounts.length === 0 ? (
                       <span className="cell-empty">— none —</span>
@@ -391,7 +442,7 @@ export default function UsersManager({ currentUserId }: { currentUserId: string 
 
                 {pwUserId === u.id && (
                   <tr>
-                    <td colSpan={4} style={{ padding: '10px 12px' }}>
+                    <td colSpan={6} style={{ padding: '10px 12px' }}>
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();

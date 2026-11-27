@@ -20,6 +20,21 @@ export const users = pgTable('users', {
   // issued with, so bumping it signs the user out everywhere else.
   tokenVersion: integer('token_version').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  // --- login tracking ---
+  // These are `timestamptz`, unlike the older columns above. A bare `timestamp`
+  // is returned without a zone and the driver reads it as server-local time, so
+  // on a non-UTC host it lands an hour (or more) off — which silently broke the
+  // staleness comparison below. Storing an absolute instant removes the
+  // ambiguity for both the server and the browser.
+  // Set on each successful sign-in.
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  // Refreshed as the user moves around, throttled to roughly once every few
+  // minutes. Used to approximate "online now" — JWT sessions are stateless, so
+  // there is no sign-out event to observe.
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  // Consecutive failed sign-ins; reset to 0 on a successful one.
+  failedLoginCount: integer('failed_login_count').notNull().default(0),
+  lastFailedLoginAt: timestamp('last_failed_login_at', { withTimezone: true }),
 });
 
 // Customer accounts (e.g. "Aarke USA (Amazon)")
