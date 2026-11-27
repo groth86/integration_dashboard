@@ -117,6 +117,42 @@ export const integrationRecords = pgTable(
   }),
 );
 
+/**
+ * Per-account CloudX (WMS) connection settings.
+ *
+ * Kept in its own table rather than on `accounts` so that a plain
+ * `select * from accounts` can never return a credential, and so this table can
+ * be treated differently in backups and access reviews.
+ *
+ * The client secret is stored encrypted (see src/lib/secrets.ts) and is never
+ * sent to the browser — the UI only ever learns whether one is set.
+ */
+export const accountWmsConfig = pgTable('account_wms_config', {
+  accountId: integer('account_id')
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  // OAuth client-credentials flow
+  tokenUrl: text('token_url'),
+  clientId: text('client_id'),
+  clientSecret: text('client_secret'), // AES-256-GCM sealed
+  scope: text('scope'),
+  // Where to ask for a record's status. {orderReference} is substituted.
+  statusUrlTemplate: text('status_url_template'),
+  // Dot-path to the status value inside the JSON response, e.g. "data.status".
+  statusPath: text('status_path'),
+  // The exact status text that means "needs attention".
+  errorStatusValue: text('error_status_value').notNull().default('Imported with Errors'),
+  // Comma-separated integration types to check. Pick Tickets today; ASNs later
+  // are a config change rather than a code change.
+  checkTypes: text('check_types').notNull().default('Pick Ticket'),
+  lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AccountWmsConfig = typeof accountWmsConfig.$inferSelect;
+
 export type User = typeof users.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type IntegrationRecord = typeof integrationRecords.$inferSelect;

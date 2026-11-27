@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Pagination, { clampPage } from '@/components/Pagination';
 
-type Agg = Record<string, Record<string, { success: number; total: number }>>;
+type Agg = Record<string, Record<string, { success: number; withErrors?: number; total: number }>>;
 
 export default function OverviewGrid({
   accountsList,
@@ -33,10 +33,14 @@ export default function OverviewGrid({
       ? integrationTypes.slice((current - 1) * pageSize, current * pageSize)
       : integrationTypes;
 
-  function cellClass(cell?: { success: number; total: number }) {
+  function cellClass(cell?: { success: number; withErrors?: number; total: number }) {
     if (!cell || cell.total === 0) return 'cell-empty';
     if (cell.success === cell.total) return 'cell-success';
-    if (cell.success === 0) return 'cell-failed';
+    const withErrors = cell.withErrors ?? 0;
+    // Nothing outright failed — the shortfall is records stuck in the WMS, so
+    // warn rather than showing red.
+    if (cell.success + withErrors === cell.total) return 'cell-mixed';
+    if (cell.success === 0 && withErrors === 0) return 'cell-failed';
     return 'cell-mixed';
   }
 

@@ -48,6 +48,17 @@ function fmt(d: string | null): string {
   return d ? new Date(d).toLocaleString('en-GB') : '—';
 }
 
+export const IMPORTED_WITH_ERRORS = 'Imported with Errors';
+
+/** Imported with Errors is its own state: the API call succeeded, but the WMS
+ *  rejected the data afterwards. Amber rather than red — it needs attention,
+ *  but it is not the same as never arriving. */
+function statusClass(status: string): string {
+  if (status === 'Success') return 'status-success';
+  if (status === IMPORTED_WITH_ERRORS) return 'status-warn';
+  return 'status-failed';
+}
+
 function RecordDetail({ id, colSpan }: { id: number; colSpan: number }) {
   const [state, setState] = useState<{ loading: boolean; error?: string; data?: Detail }>({ loading: true });
   useEffect(() => {
@@ -139,7 +150,8 @@ export default function LogView({
     statusSummary.find((r) => r.status?.toLowerCase() === s)?.count ?? 0;
   const successCount = countFor('success');
   const failedCount = countFor('failed');
-  const otherCount = Math.max(0, total - successCount - failedCount);
+  const withErrorsCount = countFor(IMPORTED_WITH_ERRORS.toLowerCase());
+  const otherCount = Math.max(0, total - successCount - failedCount - withErrorsCount);
   const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
   const successPct = pct(successCount);
   const failedPct = pct(failedCount);
@@ -391,6 +403,7 @@ export default function LogView({
           >
             <option value="ALL">ALL</option>
             <option value="Success">Success</option>
+            <option value={IMPORTED_WITH_ERRORS}>Imported with Errors</option>
             <option value="Failed">Failed</option>
           </select>
         </div>
@@ -458,6 +471,13 @@ export default function LogView({
             <div className="tile-value ok">{successCount.toLocaleString()}</div>
             <div className="tile-sub">{total ? `${successPct}% of total` : '—'}</div>
           </div>
+          {withErrorsCount > 0 && (
+            <div className="tile">
+              <div className="tile-label">&gt; WITH ERRORS</div>
+              <div className="tile-value warn">{withErrorsCount.toLocaleString()}</div>
+              <div className="tile-sub">stuck in the WMS</div>
+            </div>
+          )}
           <div className="tile">
             <div className="tile-label">&gt; FAILED</div>
             <div className="tile-value bad">{failedCount.toLocaleString()}</div>
@@ -553,7 +573,7 @@ export default function LogView({
                   <td className="row-cell" style={{ whiteSpace: 'nowrap' }}>{r.integrationType}</td>
                   <td className="rec-id" style={{ whiteSpace: 'nowrap' }}>{r.orderReference}</td>
                   <td className="rec-id">{r.recordId}</td>
-                  <td className={r.status === 'Success' ? 'status-success' : 'status-failed'} style={{ whiteSpace: 'nowrap' }}>
+                  <td className={statusClass(r.status)} style={{ whiteSpace: 'nowrap' }}>
                     {r.status}
                   </td>
                   <td className="row-cell">{r.responseCode ?? ''}</td>

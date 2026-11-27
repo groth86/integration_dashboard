@@ -102,6 +102,9 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 .rec-id { color: var(--blue); white-space: nowrap; }
 .status-success { background: var(--cell-success-bg); color: var(--green); }
 .status-failed { background: var(--cell-failed-bg); color: var(--red); }
+/* Accepted by the API but rejected by the WMS afterwards — needs attention,
+   but distinct from never having arrived. */
+.status-warn { background: var(--cell-mixed-bg); color: var(--amber); }
 .response-text { color: #8a9490; }
 
 /* Login ------------------------------------------------------- */
@@ -346,6 +349,7 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 [data-theme='modern'] .rec-id { color: #1d4ed8; }
 [data-theme='modern'] .status-success { background: #e7f5ec; color: #15803d; }
 [data-theme='modern'] .status-failed { background: #fdecec; color: #b91c1c; }
+[data-theme='modern'] .status-warn { background: #fdf6e3; color: #92610a; }
 [data-theme='modern'] .response-text { color: var(--m-dim); }
 
 /* Panels / cards ---------------------------------------------- */
@@ -433,6 +437,7 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 .tile-value { font-size: 24px; line-height: 1.15; color: var(--row-text); }
 .tile-value.ok { color: var(--green); }
 .tile-value.bad { color: var(--red); }
+.tile-value.warn { color: var(--amber); }
 .tile-sub { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
 
 [data-theme='modern'] .tile {
@@ -445,6 +450,7 @@ tbody td { color: var(--green-dim); padding: 8px 10px; }
 [data-theme='modern'] .tile-value { color: var(--m-text); font-weight: 500; }
 [data-theme='modern'] .tile-value.ok { color: #15803d; }
 [data-theme='modern'] .tile-value.bad { color: #b91c1c; }
+[data-theme='modern'] .tile-value.warn { color: #92610a; }
 
 /* Print -------------------------------------------------------
    Used by the PRINT / PDF button: drop the chrome and controls so

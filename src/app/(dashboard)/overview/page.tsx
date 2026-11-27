@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { integrationRecords } from '@/db/schema';
 import { getSession } from '@/lib/auth';
 import { getVisibleAccounts } from '@/lib/recordFilters';
+import { IMPORTED_WITH_ERRORS } from '@/lib/wmsSweep';
 import OverviewGrid from './OverviewGrid';
 
 export const dynamic = 'force-dynamic';
@@ -58,14 +59,18 @@ export default async function OverviewPage() {
     days.push({ key, label });
   }
 
-  // Aggregate: integrationType -> dayKey -> { success, total }
-  const agg: Record<string, Record<string, { success: number; total: number }>> = {};
+  // Aggregate: integrationType -> dayKey -> { success, withErrors, total }
+  // `withErrors` is tracked separately so a day made up entirely of records
+  // stuck in the WMS reads as a warning rather than an outright failure.
+  const agg: Record<string, Record<string, { success: number; withErrors: number; total: number }>> = {};
   for (const r of records) {
     const dayKey = new Date(r.timestamp).toISOString().slice(0, 10);
     agg[r.integrationType] ??= {};
-    agg[r.integrationType][dayKey] ??= { success: 0, total: 0 };
-    agg[r.integrationType][dayKey].total += 1;
-    if (r.status === 'Success') agg[r.integrationType][dayKey].success += 1;
+    agg[r.integrationType][dayKey] ??= { success: 0, withErrors: 0, total: 0 };
+    const cell = agg[r.integrationType][dayKey];
+    cell.total += 1;
+    if (r.status === 'Success') cell.success += 1;
+    else if (r.status === IMPORTED_WITH_ERRORS) cell.withErrors += 1;
   }
 
   const integrationTypes = Object.keys(agg).sort();

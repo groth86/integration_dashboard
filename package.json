@@ -11,7 +11,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "monitor": "tsx src/jobs/monitor.ts",
-    "purge": "tsx src/jobs/purge.ts"
+    "purge": "tsx src/jobs/purge.ts",
+    "wms:check": "tsx src/jobs/wmsStatus.ts"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
